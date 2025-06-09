@@ -1,0 +1,179 @@
+from dotenv import load_dotenv, find_dotenv
+import os
+import pprint
+from datetime import datetime as dt
+from pymongo import MongoClient
+load_dotenv(find_dotenv())
+
+password = os.environ.get("MONGODB_PWD")
+
+connection_string = f"mongodb+srv://vishalkaushik:{password}@cluster0.v6qizru.mongodb.net/?retryWrites=true&w=majority&authSource=admin"
+
+client = MongoClient(connection_string)
+
+
+dbs = client.list_database_names()
+production = client.production
+
+printer = pprint.PrettyPrinter()
+
+
+def create_book_collection():
+    book_validator = {
+        "$jsonSchema" : {
+            "bsonType" : "object",
+            "required" : ["Title" , "author" , "publish_date" , "type" , "copies"],
+            "properties" : {
+                "title" : {
+                    "bsonType" : "string",
+                    "description" : "must be a string and is required"
+                },
+                "authors" : {
+                    "bsonType" : "array",
+                    "items": {
+                        "bsonType" : "objectId",
+                        "description" : "must be an objectId and is required"
+                    }
+                },
+                "publish_date" : {
+                    "bsonType" : "date",
+                    "description" : "must be date and is required"
+                },
+                "type" :{
+                    "enum" : ["Fiction" , "Non-Fiction"],
+                    "description" : "can only be one of the enum values and is required"
+                },
+                "copies" : {
+                    "bsonType" : "int",
+                    "minimum" : 0,
+                    "description" : "must be an integer greater than 0 and is required"
+                },
+            }
+        }
+
+    }
+
+    try:
+        production.create_collection("book")
+    except Exception as e:
+        print(e)
+
+    production.command("collMod" , "book" , validator = book_validator)
+
+def create_author_collection():
+    author_validator = {
+        "jsonSchema" : {
+            "bsonType" : "object",
+            "required" : ["first_name" , "last_name" ,"date_of_birth"],
+            "properties" : {
+                "first_name" : {
+                    "bsonType" : "string",
+                    "description" : "must be a string and is required"
+                },
+                "last_name" : {
+                    "bsonType" : "string",
+                    "description" : "must be a string and is required"
+                },
+                "date_of_birth" : {
+                    "bsonType" : "date",
+                    "description" : "must be a date and is required"
+                },
+            }
+        }
+        
+    }
+
+    try:
+        production.create_collection("author")
+        
+    except Exception as e:
+        print(e)
+    
+    production.command("collMod" ,"author" , validator = author_validator)
+
+# create_author_collection()
+
+def create_data():
+    authors = [
+        {
+            "first_name" : "Tim",
+            "last_name" : "Ruscica",
+            "date_of_birth" : dt(2000 , 7 , 20)
+        },
+        {
+            "first_name": "George",
+            "last_name" : "Orwell",
+            "date_of_birth" : dt(1903 , 6 , 25 )
+        },
+        {
+            "first_name": "Herman",
+            "last_name" : "Milville",
+            "date_of_birth" : dt(1819 , 8 , 1)
+        },
+        {
+            "first_name": "F. Scott",
+            "last_name" : "Fitzgerald",
+            "date_of_birth" : dt(1886 , 9 , 24 )
+        }
+    ]
+    author_collection = production.author
+    authors = author_collection.insert_many(authors).inserted_ids
+
+    books = [
+        {
+            "title" : "MongoDB Advanced Tutorial",
+            "authors": [authors[0]],
+            "publish_date" : dt.today(),
+            "type" : "Non-Fiction",
+            "copies" : 5
+        },
+        {
+            "title" : "Python For Dummies",
+            "authors" : [authors[0]],
+            "publish_date" : dt(2022,1, 17),
+            "type" : "Fiction",
+            "copies" : 5
+        },
+        {
+            "title" : "Nineteen Eighty-four",
+            "authors":[authors[1]],
+            "publish_date" : dt(1949 , 6 , 8),
+            "type" : "Fiction",
+            "copies" : 5
+        },
+        {
+            "title" : "The Great Gatsby",
+            "authors":[authors[3]],
+            "publish_date" : dt(2014, 5 , 23),
+            "type" : "Fiction",
+            "copies" : 5
+        },
+        {
+            "title" : "Moby Dick",
+            "authors":[authors[2]],
+            "publish_date" : dt(1851 , 9 , 24),
+            "type" : "Fiction",
+            "copies" : 5
+        }
+    ]
+
+    book_collection = production.book
+    book_collection.insert_many(books)
+
+# create_data()
+
+
+# books_containing_a = production.book.find({"title":{"$regex" : "a{1}"}})
+# printer.pprint(list(books_containing_a))
+
+# authors_and_books = production.authors.aggregate([{
+#     "$lookup" : {
+#         "from" : "book",
+#         "lockfield" : "_id",
+#         "foreignField" : "authors",
+#         "as" : "books"
+           
+#     }
+# }])
+
+# printer.pprint(list(authors_and_books))
