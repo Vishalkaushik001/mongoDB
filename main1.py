@@ -12,7 +12,7 @@ connection_string = f"mongodb+srv://vishalkaushik:{password}@cluster0.v6qizru.mo
 client = MongoClient(connection_string)
 
 
-dbs = client.list_database_names()
+# dbs = client.list_database_names()
 production = client.production
 
 printer = pprint.PrettyPrinter()
@@ -62,7 +62,7 @@ def create_book_collection():
 
 def create_author_collection():
     author_validator = {
-        "jsonSchema" : {
+        "$jsonSchema" : {
             "bsonType" : "object",
             "required" : ["first_name" , "last_name" ,"date_of_birth"],
             "properties" : {
@@ -114,9 +114,9 @@ def create_data():
             "first_name": "F. Scott",
             "last_name" : "Fitzgerald",
             "date_of_birth" : dt(1886 , 9 , 24 )
-        }
+        },
     ]
-    author_collection = production.author
+    author_collection = production.authors
     authors = author_collection.insert_many(authors).inserted_ids
 
     books = [
@@ -160,20 +160,117 @@ def create_data():
     book_collection = production.book
     book_collection.insert_many(books)
 
-# create_data()
+create_data()
 
 
-# books_containing_a = production.book.find({"title":{"$regex" : "a{1}"}})
-# printer.pprint(list(books_containing_a))
+books_containing_a = production.book.find({"title":{"$regex" : "a{1}", "$options" : "i"}})
+printer.pprint(list(books_containing_a))
 
-# authors_and_books = production.authors.aggregate([{
-#     "$lookup" : {
-#         "from" : "book",
-#         "lockfield" : "_id",
-#         "foreignField" : "authors",
-#         "as" : "books"
+authors_and_books = production.authors.aggregate([{
+    "$lookup" : {
+        "from" : "book",
+        "lockfield" : "_id",
+        "foreignField" : "authors",
+        "as" : "books"
            
-#     }
-# }])
+    }
+}])
 
-# printer.pprint(list(authors_and_books))
+printer.pprint(list(authors_and_books))
+
+
+
+authors_book_count = production.authors.aggregate(
+    {
+        "$lookup" : {
+            "from" : "book",
+            "lockField" : "_id",
+            "foreignField" : "authors",
+            "as" : "books"
+        }
+    
+    },
+    {
+        "$addFields" : {
+            "total_books" : {"$size" : "$books"}
+
+        }
+
+
+    },
+    {
+        "$project" : {"first_name" : 1 , "last_name" : 1 , "total_books": 1 , "_id" : 0} , 
+    }
+
+)
+
+printer.pprint(list(authors_book_count))
+
+
+books_with_old_authors = production.book.aggregate([
+    {
+        "$lookup" : {
+            "from" : "author",
+            "localField" : "authors",
+            "foreignField" : "_id", 
+            "as" : "authors"
+
+        }
+    },
+    {
+        "$set" : {
+            "authors" : {
+                "$map" : {
+                    "input" : "$authors",
+                    "in" : {
+                        "age" : {
+                            "$dateDiff" : {
+                                "startDate" : "$$this.date_of_birth",
+                                "endDate" : "$$NOW",
+                                "unit" : "year"
+                            }
+                        },
+                        "first_name" : "$$this.first_name",
+                        "last_name" : "$$this.last_name",
+                    }
+                }
+            }
+        }
+    },
+    {
+        "$match" : {
+            "$and" : [
+                {"authors.age" : {"$gte" : 50 }},
+                {"authors.age" : {"$lte" : 150}},
+
+            ]
+        }
+    },
+    {
+        "$sort":{
+            "age" : 1
+        }
+    }
+
+])
+
+printer.pprint(list(books_with_old_authors))
+
+
+
+
+
+import pyarrow
+from pymongoarrow.api import Schema
+from pymongoarrow.monkey import patch_all
+import pymongoarrow as pma
+from bson import ObjectId
+
+
+patch_all()
+
+author = Schema({"_id" : ObjectId , "first_name" : pyarrow.string(), "last_name" : pyarrow.string() , "date_of_birth" : dt})
+df = production.author.find_pandas_all({}, schema = author)
+
+print(df.head())
+
