@@ -271,6 +271,9 @@ patch_all()
 
 author = Schema({"_id" : ObjectId , "first_name" : pyarrow.string(), "last_name" : pyarrow.string() , "date_of_birth" : dt})
 df = production.author.find_pandas_all({}, schema = author)
+arrow_table = production.author.find_arrow_all({}, schema = author)
 
-print(df.head())
+# print(arrow_table)
+ndarray = production.author.find_numpy_all({}, schema = author)
+print(ndarray)
 
